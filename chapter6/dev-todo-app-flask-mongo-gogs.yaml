@@ -1,0 +1,806 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+labels:
+  application: todo-app-flask-mongo
+  createdBy: todo-app-flask-mongo-template
+message: |-
+  The following service(s) have been created in your project: ${APPLICATION_NAME}, ${MONGODB_APPLICATION_NAME}.
+
+  ${MONGODB_APPLICATION_NAME} Connection Info:
+         Username: ${MONGODB_USER}
+         Password: ${MONGODB_PASSWORD}
+         Database Name: ${MONGODB_DATABASE}
+         Connection URL: mongodb://${MONGODB_USER}:${MONGODB_PASSWORD}@${MONGODB_APPLICATION_NAME}/${MONGODB_DATABASE}
+metadata:
+  annotations:
+    description: |-
+      An example Flask application with a MongoDB database. For more information about using this template, including OpenShift considerations, see https://github.com/sclorg/mongodb-container/blob/master/3.2/README.md.
+
+      WARNING: MongoDB instance is ephemeral so any data will be lost on pod destruction.
+    iconClass: icon-python,icon-mongodb
+    openshift.io/display-name: Flask + MongoDB (Ephemeral)
+    tags: quickstart,python,flask,database,mongodb,gogs
+    template.openshift.io/documentation-url: https://github.com/sclorg/mongodb-container/blob/master/3.2/README.md
+    template.openshift.io/long-description: This template defines resources needed
+      to develop a Flask based application, including a build configuration, application
+      deployment configuration, and database deployment configuration.  The database
+      is stored in non-persistent storage, so this configuration should be used for
+      experimental purposes only.
+    template.openshift.io/provider-display-name: OpenShift In Action
+  creationTimestamp: 2018-07-15T14:52:15Z
+  name: dev-todo-app-flask-mongo-gogs
+  namespace: dev
+  resourceVersion: "23581"
+  selfLink: /apis/template.openshift.io/v1/namespaces/dev/templates/dev-todo-app-flask-mongo-gogs
+  uid: a9da5076-883e-11e8-b090-525400774aa5
+objects:
+- apiVersion: v1
+  groupNames: null
+  kind: RoleBinding
+  metadata:
+    name: default_edit
+  roleRef:
+    name: edit
+  subjects:
+  - kind: ServiceAccount
+    name: default
+- apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      component: ${MONGODB_APPLICATION_NAME}
+    name: ${MONGODB_APPLICATION_NAME}
+  spec:
+    ports:
+    - name: mongo
+      port: 27017
+      protocol: TCP
+      targetPort: 27017
+    selector:
+      name: ${MONGODB_APPLICATION_NAME}
+    sessionAffinity: None
+    type: ClusterIP
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    labels:
+      component: ${MONGODB_APPLICATION_NAME}
+    name: ${MONGODB_APPLICATION_NAME}
+  spec:
+    replicas: 1
+    selector:
+      name: ${MONGODB_APPLICATION_NAME}
+    strategy:
+      recreateParams:
+        timeoutSeconds: 600
+      resources: {}
+      type: Recreate
+    template:
+      metadata:
+        labels:
+          name: ${MONGODB_APPLICATION_NAME}
+      spec:
+        containers:
+        - env:
+          - name: KUBERNETES_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: MONGODB_USER
+            value: ${MONGODB_USER}
+          - name: MONGODB_PASSWORD
+            value: ${MONGODB_PASSWORD}
+          - name: MONGODB_DATABASE
+            value: ${MONGODB_DATABASE}
+          - name: MONGODB_ADMIN_PASSWORD
+            value: ${MONGODB_ADMIN_PASSWORD}
+          image: ${MONGODB_APPLICATION_NAME}
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+              port: 27017
+            timeoutSeconds: 1
+          name: ${MONGODB_APPLICATION_NAME}
+          ports:
+          - containerPort: 27017
+            protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+              port: 27017
+            timeoutSeconds: 1
+          resources:
+            limits:
+              memory: ${MONGO_MEMORY_LIMIT}
+          securityContext:
+            capabilities: {}
+            privileged: false
+          terminationMessagePath: /dev/termination-log
+          volumeMounts:
+          - mountPath: /var/lib/mongodb/data
+            name: mongodb-data
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        securityContext: {}
+        terminationGracePeriodSeconds: 30
+        volumes:
+        - emptyDir: {}
+          name: mongodb-data
+    test: false
+    triggers:
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - ${MONGODB_APPLICATION_NAME}
+        from:
+          kind: ImageStreamTag
+          name: mongodb:3.2
+          namespace: openshift
+      type: ImageChange
+    - type: ConfigChange
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    name: ${APPLICATION_NAME}
+  spec:
+    tags:
+    - name: latest
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      build: ${APPLICATION_NAME}
+    name: ${APPLICATION_NAME}
+  spec:
+    output:
+      to:
+        kind: ImageStreamTag
+        name: ${APPLICATION_NAME}:latest
+    postCommit: {}
+    resources: {}
+    runPolicy: Serial
+    source:
+      contextDir: ${CONTEXT_DIR}
+      git:
+        ref: ${GIT_REF}
+        uri: ${GIT_URI
+      type: Git
+    strategy:
+      sourceStrategy:
+        from:
+          kind: ImageStreamTag
+          name: python:3.5
+          namespace: openshift
+        incremental: false
+      type: Source
+    triggers:
+    - github:
+        secret: ${GITHUB_TRIGGER_SECRET}
+      type: GitHub
+    - generic:
+        secret: ${GENERIC_TRIGGER_SECRET}
+      type: Generic
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    labels:
+      component: ${APPLICATION_NAME}
+    name: ${APPLICATION_NAME}
+  spec:
+    replicas: 1
+    selector:
+      component: ${APPLICATION_NAME}
+    strategy:
+      resources: {}
+      rollingParams:
+        intervalSeconds: 1
+        maxSurge: 25%
+        maxUnavailable: 25%
+        timeoutSeconds: 600
+        updatePeriodSeconds: 1
+      type: Rolling
+    template:
+      metadata:
+        labels:
+          component: ${APPLICATION_NAME}
+      spec:
+        containers:
+        - env:
+          - name: KUBERNETES_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: DB_HOST
+            value: ${MONGODB_APPLICATION_NAME}
+          - name: MONGO_CONNECTION_URI
+            value: mongodb://${MONGODB_USER}:${MONGODB_PASSWORD}@${MONGODB_APPLICATION_NAME}/${MONGODB_DATABASE}
+          image: ${APPLICATION_NAME}
+          imagePullPolicy: IfNotPresent
+          name: ${APPLICATION_NAME}
+          ports:
+          - containerPort: 8080
+            protocol: TCP
+          resources:
+            limits:
+              memory: ${MEMORY_LIMIT}
+          terminationMessagePath: /dev/termination-log
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        securityContext: {}
+        terminationGracePeriodSeconds: 30
+    test: false
+    triggers:
+    - type: ConfigChange
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - ${APPLICATION_NAME}
+        from:
+          kind: ImageStreamTag
+          name: ${APPLICATION_NAME}:latest
+      type: ImageChange
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      service.alpha.openshift.io/dependencies: '[{"name":"${MONGODB_APPLICATION_NAME}","namespace":"","kind":"Service"}]'
+    labels:
+      component: ${APPLICATION_NAME}
+    name: ${APPLICATION_NAME}
+  spec:
+    ports:
+    - name: 8080-tcp
+      port: 8080
+      protocol: TCP
+      targetPort: 5000
+    selector:
+      component: ${APPLICATION_NAME}
+    sessionAffinity: None
+    type: ClusterIP
+- apiVersion: v1
+  kind: Route
+  metadata:
+    labels:
+      component: ${APPLICATION_NAME}
+    name: ${APPLICATION_NAME}
+  spec:
+    host: ${APPLICATION_HOSTNAME}
+    port:
+      targetPort: 8080-tcp
+    to:
+      kind: Service
+      name: ${APPLICATION_NAME}
+      weight: 100
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      description: The Gogs server's http port
+    labels:
+      app: gogs
+    name: gogs
+  spec:
+    ports:
+    - name: web
+      port: 3000
+      protocol: TCP
+      targetPort: 3000
+    selector:
+      app: gogs
+      deploymentconfig: gogs
+    sessionAffinity: None
+    type: ClusterIP
+- apiVersion: v1
+  kind: Service
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: gogs
+    name: postgresql-gogs
+  spec:
+    ports:
+    - name: postgresql
+      port: 5432
+      protocol: TCP
+      targetPort: 5432
+    selector:
+      app: gogs
+      deploymentconfig: postgresql-gogs
+    sessionAffinity: None
+    type: ClusterIP
+- apiVersion: v1
+  kind: Route
+  metadata:
+    annotations:
+      description: Route for gogs's http service.
+    labels:
+      app: gogs
+    name: gogs
+  spec:
+    to:
+      kind: Service
+      name: gogs
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    labels:
+      app: gogs
+    name: gogs
+  spec:
+    tags:
+    - annotations:
+        description: The Gogs git server docker image
+        tags: gogs,go,golang
+      from:
+        kind: DockerImage
+        name: openshiftdemos/gogs:${GOGS_VERSION}
+      importPolicy: {}
+      name: ${GOGS_VERSION}
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    labels:
+      app: gogs
+    name: gogs
+  spec:
+    replicas: 1
+    selector:
+      app: gogs
+      deploymentconfig: gogs
+    strategy:
+      type: Recreate
+    template:
+      metadata:
+        labels:
+          app: gogs
+          deploymentconfig: gogs
+      spec:
+        initContainers:
+        - image: busybox
+          name: init-gogs-config
+          volumeMounts:
+          - name: gogs-etc
+            mountPath: /etc/gogs/conf
+          - name: gogs-config
+            mountPath: /etc/gogs-config
+          command: ["cp", "/etc/gogs-config/app.ini", "/etc/gogs/conf/app.ini"]
+        containers:
+        - image: ' '
+          imagePullPolicy: Always
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          name: gogs
+          ports:
+          - containerPort: 3000
+            protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources:
+            limits:
+              cpu: 200m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          terminationMessagePath: /dev/termination-log
+          volumeMounts:
+          - mountPath: /opt/gogs/data
+            name: gogs-data
+          - mountPath: /etc/gogs/conf
+            name: gogs-etc
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        securityContext: {}
+        terminationGracePeriodSeconds: 30
+        volumes:
+        - emptyDir: {}
+          name: gogs-data
+        - emptyDir: {}
+          name: gogs-etc
+        - configMap:
+            items:
+            - key: app.ini
+              path: app.ini
+            name: gogs-config
+          name: gogs-config
+    triggers:
+    - type: ConfigChange
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - gogs
+        from:
+          kind: ImageStreamTag
+          name: gogs:${GOGS_VERSION}
+      type: ImageChange
+  status: {}
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: gogs
+      deploymentconfig: postgresql-gogs
+    name: postgresql-gogs
+  spec:
+    replicas: 1
+    selector:
+      app: gogs
+      deploymentconfig: postgresql-gogs
+    strategy:
+      recreateParams:
+        timeoutSeconds: 600
+      type: Recreate
+    template:
+      metadata:
+        labels:
+          app: gogs
+          deploymentconfig: postgresql-gogs
+      spec:
+        containers:
+        - env:
+          - name: POSTGRESQL_USER
+            value: gogs
+          - name: POSTGRESQL_PASSWORD
+            value: ${GOGS_POSTGRESQL_PASSWORD}
+          - name: POSTGRESQL_DATABASE
+            value: gogs
+          image: ' '
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+              port: 5432
+            timeoutSeconds: 1
+          name: postgresql
+          ports:
+          - containerPort: 5432
+            protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+              - /bin/sh
+              - -i
+              - -c
+              - psql -h 127.0.0.1 -U $POSTGRESQL_USER -q -d $POSTGRESQL_DATABASE -c
+                'SELECT 1'
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources:
+            limits:
+              cpu: 200m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            capabilities: {}
+            privileged: false
+          terminationMessagePath: /dev/termination-log
+          volumeMounts:
+          - mountPath: /var/lib/pgsql/data
+            name: postgresql-data
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        securityContext: {}
+        terminationGracePeriodSeconds: 30
+        volumes:
+        - emptyDir: {}
+          name: postgresql-data
+    triggers:
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - postgresql
+        from:
+          kind: ImageStreamTag
+          name: postgresql:9.5
+          namespace: openshift
+      type: ImageChange
+    - type: ConfigChange
+  status: {}
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    annotations:
+      template.alpha.openshift.io/wait-for-ready: "true"
+    labels:
+      app: gogs
+      job: install-gogs
+    name: install-gogs
+  spec:
+    containers:
+    - command:
+      - /bin/bash
+      - /tmp/installgogs.sh
+      env:
+      - name: DEV_PROJECT
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+      image: docker.io/openshiftdemos/oc
+      name: oc
+      resources:
+        limits:
+          memory: 128Mi
+      volumeMounts:
+      - mountPath: /tmp/
+        name: gogs-install
+    restartPolicy: Never
+    volumes:
+    - configMap:
+        items:
+        - key: installgogs.sh
+          path: installgogs.sh
+        name: gogs-install
+      name: gogs-install
+- apiVersion: v1
+  data:
+    app.ini: |
+      RUN_MODE = prod
+      RUN_USER = gogs
+
+      [security]
+      INSTALL_LOCK = false
+
+      [repository]
+      ROOT = /opt/gogs/data/repositories
+
+      [webhook]
+      SKIP_TLS_VERIFY = true
+  kind: ConfigMap
+  metadata:
+    name: gogs-config
+- apiVersion: v1
+  data:
+    installgogs.sh: |-
+      #!/bin/bash
+
+      set -x
+
+      # Use the oc client to get the url for the gogs route and service
+      GOGSSVC=$(oc get svc gogs -o template --template='{{.spec.clusterIP}}')
+      GOGSROUTE=$(oc get route gogs -o template --template='{{.spec.host}}')
+
+      # Use the oc client to get the postgres variables into the current shell
+      eval $(oc env dc/postgresql-gogs --list | grep -v \#)
+
+      # postgres has a readiness probe, so checking if there is at least one
+      # endpoint means postgres is alive and ready, so we can then attempt to install gogs
+      # we're willing to wait 60 seconds for it, otherwise something is wrong.
+      x=1
+      oc get ep postgresql-gogs -o yaml | grep "\- addresses:"
+      while [ ! $? -eq 0 ]
+      do
+        sleep 10
+        x=$(( $x + 1 ))
+
+        if [ $x -gt 100 ]
+        then
+          exit 255
+        fi
+
+        oc get ep postgresql-gogs -o yaml | grep "\- addresses:"
+      done
+
+      # now we wait for gogs to be ready in the same way
+      x=1
+      oc get ep gogs -o yaml | grep "\- addresses:"
+      while [ ! $? -eq 0 ]
+      do
+        sleep 10
+        x=$(( $x + 1 ))
+
+        if [ $x -gt 100 ]
+        then
+          exit 255
+        fi
+
+        oc get ep gogs -o yaml | grep "\- addresses:"
+      done
+
+      # we might catch the router before it's been updated, so wait just a touch
+      # more
+      sleep 10
+
+      RETURN=$(curl -o /dev/null -sL --post302 -w "%{http_code}" http://$GOGSSVC:3000/install \
+      --form db_type=PostgreSQL \
+      --form db_host=postgresql-gogs:5432 \
+      --form db_user=gogs \
+      --form db_passwd=$POSTGRESQL_PASSWORD \
+      --form db_name=gogs \
+      --form ssl_mode=disable \
+      --form db_path=data/gogs.db \
+      --form "app_name=Gogs: Go Git Service" \
+      --form repo_root_path=/opt/gogs/data/repositories \
+      --form run_user=gogs \
+      --form domain=localhost \
+      --form ssh_port=22 \
+      --form http_port=3000 \
+      --form app_url=http://${GOGSROUTE}/ \
+      --form log_root_path=/opt/gogs/log \
+      --form admin_name=gogs \
+      --form admin_passwd=${GOGS_PASSWORD} \
+      --form admin_confirm_passwd=${GOGS_PASSWORD} \
+      --form admin_email=admin@gogs.com)
+
+      if [ $RETURN != "200" ] && [ $RETURN != "302" ]
+      then
+        echo "ERROR: Failed to initialize Gogs"
+        exit 255
+      fi
+
+      sleep 10
+
+      # import github repository
+      cat <<EOF > /var/tmp/data.json
+      {
+        "clone_addr": "${GIT_URI}",
+        "uid": 1,
+        "repo_name": "${CONTEXT_DIR}"
+      }
+      EOF
+
+      RETURN=$(curl -o /dev/null -sL -w "%{http_code}" -H "Content-Type: application/json" \
+      -u gogs:${GOGS_PASSWORD} -X POST http://$GOGSSVC:3000/api/v1/repos/migrate -d @/var/tmp/data.json)
+
+      if [ $RETURN != "201" ]
+      then
+        echo "ERROR: Failed to imported openshift-cicd-flask-mongo GitHub repo"
+        exit 255
+      fi
+
+      sleep 5
+
+      # add webhook to Gogs to trigger pipeline on push
+      cat <<EOF > /var/tmp/data.json
+      {
+        "type": "gogs",
+        "config": {
+          "url": "https://openshift.default.svc.cluster.local/oapi/v1/namespaces/${DEV_PROJECT}/buildconfigs/${APPLICATION_NAME}/webhooks/${GENERIC_TRIGGER_SECRET}/generic",
+          "content_type": "json"
+        },
+        "events": [
+          "push"
+        ],
+        "active": true
+      }
+      EOF
+
+      RETURN=$(curl -o /dev/null -sL -w "%{http_code}" -H "Content-Type: application/json" \
+      -u gogs:${GOGS_PASSWORD} -X POST http://$GOGSSVC:3000/api/v1/repos/gogs/openshift-cicd-flask-mongo/hooks -d @/var/tmp/data.json)
+
+      if [ $RETURN != "201" ]
+      then
+        echo "ERROR: Failed to set webhook"
+        exit 255
+      fi
+
+
+      export newgiturl=http://$(oc get svc gogs -o=jsonpath='{.spec.clusterIP}'):$(oc get svc gogs -o=jsonpath='{.spec.ports[].port}')/gogs/openshift-cicd-flask-mongo
+       echo newgiturl=$newgiturl
+      export patchstr={\"spec\":{\"source\":{\"git\":{\"uri\":\"$newgiturl\"}}}}
+      echo $patchstr
+      oc patch bc todo-app-flask-mongo -p $patchstr
+
+      oc start-build todo-app-flask-mongo
+  kind: ConfigMap
+  metadata:
+    name: gogs-install
+parameters:
+- description: The name for the todo-app-flask-mongo application.
+  displayName: Application Name
+  name: APPLICATION_NAME
+  required: true
+  value: todo-app-flask-mongo
+- description: The name for the mongodb application.
+  displayName: Mongodb App
+  name: MONGODB_APPLICATION_NAME
+  required: true
+  value: mongodb
+- description: 'Custom hostname for the todo application.  Leave blank for default
+    hostname, e.g.: <application-name>.<project>.<default-domain-suffix>'
+  displayName: Application route
+  name: APPLICATION_HOSTNAME
+- description: Git source URI for application
+  displayName: Git source repository
+  name: GIT_URI
+  required: true
+  value: https://github.com/OpenShiftInAction/chapter6
+- description: Set this to the relative path to your project if it is not in the root
+    of your repository.
+  displayName: Context Directory
+  name: CONTEXT_DIR
+  value: openshift-cicd-flask-mongo
+- description: Git branch/tag reference
+  displayName: Git branch/tag reference
+  name: GIT_REF
+  required: true
+  value: master
+- description: Database name
+  displayName: Database name
+  name: MONGODB_DATABASE
+  required: true
+  value: tododb
+- description: Database user name
+  displayName: Database user name
+  from: user[a-zA-Z0-9]{3}
+  generate: expression
+  name: MONGODB_USER
+  required: true
+- description: Database user password
+  displayName: Database user password
+  from: '[a-zA-Z0-9]{8}'
+  generate: expression
+  name: MONGODB_PASSWORD
+  required: true
+- description: Database admin password
+  displayName: Database admin password
+  from: '[a-zA-Z0-9]{8}'
+  generate: expression
+  name: MONGODB_ADMIN_PASSWORD
+  required: true
+- description: Maximum amount of memory the Flask container can use.
+  displayName: Memory Limit (Flask)
+  name: MEMORY_LIMIT
+  required: true
+  value: 128Mi
+- description: Maximum amount of memory the MongoDB container can use.
+  displayName: Memory Limit (MongoDB)
+  name: MONGO_MEMORY_LIMIT
+  required: true
+  value: 128Mi
+- description: Password for the Gogs user.
+  displayName: Gogs Password
+  name: GOGS_PASSWORD
+  required: true
+  value: password
+- displayName: Gogs version
+  name: GOGS_VERSION
+  required: true
+  value: 0.11.29
+- description: Password for Gogs Git Server PostgreSQL backend
+  displayName: Gogs' PostgreSQL Password
+  from: '[a-zA-Z0-9]{16}'
+  generate: expression
+  name: GOGS_POSTGRESQL_PASSWORD
+  required: true
+- description: Github trigger secret
+  displayName: GitHub Trigger
+  from: '[a-zA-Z0-9]{8}'
+  generate: expression
+  name: GITHUB_TRIGGER_SECRET
+  required: true
+- description: Generic build trigger secret
+  displayName: Generic Trigger
+  from: '[a-zA-Z0-9]{8}'
+  generate: expression
+  name: GENERIC_TRIGGER_SECRET
+  required: true
