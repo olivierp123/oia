@@ -1,0 +1,13 @@
+6.6
+===
+
+oc policy add-role-to-user edit system:serviceaccount:cicd:jenkins -n dev
+oc policy add-role-to-user edit system:serviceaccount:cicd:jenkins -n test
+oc policy add-role-to-user edit system:serviceaccount:cicd:jenkins -n prod
+
+oc new-project cicd --display-name="ToDo App - CI/CD with Jenkins"
+
+oc create -f https://raw.githubusercontent.com/OpenShiftInAction/chapter6/master/jenkins-s2i/jenkins-s2i-template.json -n cicd
+
+oc new-app --template="cicd/jenkins-oia"
+

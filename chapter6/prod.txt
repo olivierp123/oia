@@ -7,6 +7,8 @@ oc tag todo-app-flask-mongo@sha256:1c1d740523f7046e29079c77bc216d2e8f632497b9140
 
 oc new-project prod --display-name="ToDo App - Prod"
 
+oc policy add-role-to-group system:image-puller system:serviceaccounts:prod -n dev
+
 Missing variables in template
 +++++++++++++++++++++++++++++
 
@@ -22,4 +24,20 @@ Fix variables in template
 oc create -f https://raw.githubusercontent.com/olivierp123/oia/master/chapter6/prod-todo-app-flask-mongo.json
 
 oc new-app --template="prod/prod-todo-app-flask-mongo"
+
+6.5.1
+=====
+
+oc create secret generic oia-prod-secret --from-literal=mongodb_user=user-oia --from-literal=mongodb_password=SecretPwd12 --from-literal=mongodb_hostname=mongodb --from-literal=mongodb_database=tododb
+
+oc set volumes deploymentconfigs/todo-app-flask-mongo --add --name=secret-volume --mount-path=/opt/app-root/mongo/ --secret-name=oia-prod-secret
+
+6.5.2
+=====
+
+echo "usebuttons" > style.properties
+
+oc create configmap ui-config --from-file=style.properties
+
+oc set volumes deploymentconfigs/todo-app-flask-mongo --add --name=configmap-volume --mount-path=/opt/app-root/ui/ -t configmap --configmap-name=ui-config
 
