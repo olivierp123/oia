@@ -1,0 +1,43 @@
+6.4
+===
+
+oc new-project test --display-name="ToDo App - Test"
+
+oc new-app -e MONGODB_USER=oiatestuser -e MONGODB_PASSWORD=password -e MONGODB_DATABASE=tododb -e MONGODB_ADMIN_PASSWORD=password mongodb:3.2
+
+oc policy add-role-to-group system:image-puller system:serviceaccounts:test -n dev
+
+oc new-app dev/todo-app-flask-mongo:promoteToTest
+
+oc patch svc todo-app-flask-mongo --type merge --patch '{"spec":{"ports":[{"port": 8080, "targetPort": 5000 }]}}'
+
+oc expose svc todo-app-flask-mongo
+
+6.4.1
+=====
+
+MONGO_CONNECTION_URI mongodb://oiatestuser:password@mongodb/tododb
+
+6.4.2
+=====
+
+oc patch dc not necessary
+
+oc get dc todo-app-flask-mongo -o yaml | grep -A11 triggers:
+  triggers:
+  - type: ConfigChange
+  - imageChangeParams:
+      automatic: true
+      containerNames:
+      - todo-app-flask-mongo
+      from:
+        kind: ImageStreamTag
+        name: todo-app-flask-mongo:promoteToTest
+        namespace: dev
+      lastTriggeredImage: docker-registry.default.svc:5000/dev/todo-app-flask-mongo@sha256:26fbc2fc14c62c9af20d8d7908d5f10fb853081eb13162dba8f4156699b644e6
+    type: ImageChange
+
+oc project dev
+
+oc tag todo-app-flask-mongo@sha256:1c1d740523f7046e29079c77bc216d2e8f632497b91400b73e212d42e624671b todo-app-flask-mongo:promoteToTest
+

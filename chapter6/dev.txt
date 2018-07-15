@@ -1,0 +1,15 @@
+6.3
+===
+
+oc new-project dev --display-name="ToDo App - Dev"
+
+oc create -f https://raw.githubusercontent.com/olivierp123/oia/master/chapter6/dev-todo-app-flask-mongo-gogs.yaml
+
+oc new-app --template="dev/dev-todo-app-flask-mongo-gogs"
+
+6.3.2
+=====
+
+oc tag todo-app-flask-mongo@sha256:26fbc2fc14c62c9af20d8d7908d5f10fb853081eb13162dba8f4156699b644e6 todo-app-flask-mongo:promoteToTest
+
+
