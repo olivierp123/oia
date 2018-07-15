@@ -107,7 +107,7 @@
       "kind": "RoleBinding",
       "metadata": {
         "name": "image-puller-prod",
-        "namespace": "development"
+        "namespace": "dev"
       },
       "roleRef": {
         "name": "system:image-puller"
